@@ -10,6 +10,13 @@ from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
+def format_btc(value):
+    """Format Bitcoin amount with exactly 8 decimal places, no scientific notation"""
+    if value is None:
+        return "0.00000000"
+    return f"{float(value):.8f}"
+
+app.jinja_env.filters['format_btc'] = format_btc
 
 
 @app.route('/',methods=['POST', 'GET'])
@@ -21,7 +28,8 @@ def web_root():
         if address.isnumeric():
             return redirect(url_for('get_node_request',node_id=address))
         else:
-            pattern = re.compile("^([1-9ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz])+$")
+            # Support all Bitcoin address formats: Legacy (1..., 3...), Bech32 (bc1q...), Bech32m (bc1p...)
+            pattern = re.compile("^(bc1[a-z0-9]{39,59}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$")
             if pattern.match(address):
                 node_id = getNodeFromAddress(address)
                 if node_id is not None:
