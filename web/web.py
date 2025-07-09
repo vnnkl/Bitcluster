@@ -22,9 +22,7 @@ app.jinja_env.filters['format_btc'] = format_btc
 @app.route('/',methods=['POST', 'GET'])
 def web_root():
     if request.method == 'POST':
-        
-
-        address = request.form['q']
+        address = request.form['q'].strip()  # Remove leading/trailing whitespace
         if address.isnumeric():
             return redirect(url_for('get_node_request',node_id=address))
         else:
