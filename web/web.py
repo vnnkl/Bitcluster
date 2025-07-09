@@ -5,7 +5,13 @@ from flask import *
 import re
 import csv
 import io
+import asyncio
+import threading
 from datetime import datetime, timedelta
+from pymongo import MongoClient
+from blockstream.data_processor import DataProcessor
+from blockstream.api_client import BlockstreamClient
+from settings import settings
 
 
 app = Flask(__name__)
@@ -17,6 +23,33 @@ def format_btc(value):
     return f"{float(value):.8f}"
 
 app.jinja_env.filters['format_btc'] = format_btc
+
+def analyze_address_sync(address):
+    """Synchronous wrapper for async address analysis"""
+    def run_analysis():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            # Initialize MongoDB connection
+            mongo_client = MongoClient(settings.db_server, settings.db_port)
+            db = mongo_client.bitcoin
+            
+            # Initialize processor and client
+            processor = DataProcessor(mongo_client)
+            
+            async def process():
+                async with BlockstreamClient(mongo_client) as client:
+                    return await processor.process_address(client, address, max_transactions=50)
+            
+            result = loop.run_until_complete(process())
+            return result
+        except Exception as e:
+            print(f"Analysis error for {address}: {e}")
+            return None
+        finally:
+            loop.close()
+    
+    return run_analysis()
 
 
 @app.route('/',methods=['POST', 'GET'])
@@ -33,7 +66,23 @@ def web_root():
                 if node_id is not None:
                     return redirect(url_for('get_node_request',node_id=node_id))
                 
-            return render_template('index.html',message="Invalid or inexistant address")
+                # Address not found in database - try to analyze it automatically
+                try:
+                    print(f"Address {address} not in database, analyzing...")
+                    result = analyze_address_sync(address)
+                    
+                    if result and result.get('node_id'):
+                        print(f"Analysis completed successfully, redirecting to node {result['node_id']}")
+                        return redirect(url_for('get_node_request', node_id=result['node_id']))
+                    else:
+                        return render_template('index.html', 
+                                             message=f"Unable to analyze address {address}. It may be invalid or have no transaction history.")
+                except Exception as e:
+                    print(f"Auto-analysis failed for {address}: {e}")
+                    return render_template('index.html', 
+                                         message=f"Error analyzing address {address}: {str(e)}")
+                
+            return render_template('index.html',message="Invalid address format")
 
             
         

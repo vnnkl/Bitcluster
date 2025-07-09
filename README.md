@@ -67,33 +67,40 @@ Bitcluster performs Bitcoin blockchain analysis by:
 
 ### Usage
 
-#### Two-Step Process
+#### Seamless Address Analysis
 
-**Step 1: Analyze Bitcoin Addresses (Required)**
-Before viewing addresses in the web interface, you must first analyze them to populate the database:
+**Start the Web Interface:**
+```bash
+# Start the web interface
+python3 start_website.py -p 5001 -d  # Port 5001, debug mode
+
+# Start the REST API (optional)
+python3 start_webapi.py
+```
+
+**Search Any Bitcoin Address:**
+Visit `http://127.0.0.1:5001` and search for any Bitcoin address:
+- Legacy addresses: `1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa`
+- P2SH addresses: `3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy` 
+- Bech32 addresses: `bc1q7zcnq46rvxfwtkktt4z2u3cu0m7zf2xg9xludl`
+- Bech32m addresses: `bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0`
+
+**🚀 Auto-Analysis**: Unknown addresses are automatically analyzed using the Blockstream API and stored in the database. No manual pre-processing required!
+
+#### Command-Line Analysis (Optional)
+
+For batch processing or scripted analysis:
 
 ```bash
 # Analyze specific addresses
 python3 analyze_address.py 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
 python3 analyze_address.py bc1q7zcnq46rvxfwtkktt4z2u3cu0m7zf2xg9xludl
-python3 analyze_address.py 14s8pyVSgJowCVS1WWuZha8ACMnx2rYTFq
 
 # Analyze multiple addresses from a file
 echo "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" > addresses.txt
 echo "bc1q7zcnq46rvxfwtkktt4z2u3cu0m7zf2xg9xludl" >> addresses.txt
 python3 analyze_address.py --batch addresses.txt
 ```
-
-**Step 2: Explore with Web Interface**
-```bash
-# Start the web interface
-python3 start_website.py -p 5001 -d  # Port 5001, debug mode
-
-# Start the REST API
-python3 start_webapi.py
-```
-
-Now visit `http://127.0.0.1:5001` and search for the addresses you analyzed in Step 1.
 
 #### Testing & Verification
 
@@ -308,27 +315,24 @@ If you have existing Bitcoin Core data, you can migrate to Blockstream:
    python3 update_data_source.py --source blockstream
    ```
 
-## Current Limitations
+## Features
 
-### Web Interface Search
+### ✅ **Seamless Address Search**
 
-⚠️ **Important**: The web interface currently only searches addresses that are already in the database. It does NOT automatically fetch unknown addresses from Blockstream API.
+The web interface now automatically analyzes unknown addresses in real-time:
 
 **Current Behavior:**
-- ✅ Addresses analyzed with `analyze_address.py` → Work in web interface  
-- ❌ Unknown addresses → "Invalid or inexistant address" error
-- ❌ Some bech32 addresses (bc1q...) → May fail regex validation
+- ✅ **Auto-Analysis**: Unknown addresses are automatically fetched and analyzed from Blockstream API
+- ✅ **All Address Formats**: Supports Legacy (1..., 3...), Bech32 (bc1q...), and Bech32m (bc1p...) addresses
+- ✅ **Instant Results**: Real-time analysis and immediate redirection to cluster information
+- ✅ **Database Caching**: Previously analyzed addresses load instantly from database
+- ✅ **Input Validation**: Automatic trimming and format validation
 
-**Workflow:**
-1. First run: `python3 analyze_address.py <address>`
-2. Then search in web interface: `http://127.0.0.1:5001`
-
-### Planned Improvements
-
-The following issues are being tracked for future releases:
-- Auto-fetch unknown addresses in web interface 
-- Fix bech32 address regex pattern support
-- Integrate Blockstream API directly into web search
+**How it Works:**
+1. Enter any Bitcoin address in the web interface
+2. If address exists in database → Instant results
+3. If address is unknown → Automatic Blockstream API analysis 
+4. Results stored in database → Future searches are instant
 
 ## Troubleshooting
 
