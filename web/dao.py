@@ -1,6 +1,9 @@
 import operator
+import logging
 from pymongo import MongoClient
 from settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 client = MongoClient(settings.db_server, settings.db_port)
@@ -141,3 +144,91 @@ def getNodeInformation(node_id):
     information['transactions'] = {'in': transactions_in, 'out':transactions_out}
 
     return information
+
+def getCoinJoinTransactions(limit=100, offset=0, coinjoin_type=None):
+    """
+    Get CoinJoin transactions with optional filtering
+    
+    Args:
+        limit: Maximum number of results
+        offset: Skip this many results
+        coinjoin_type: Filter by CoinJoin type ('joinmarket', 'wasabi', 'whirlpool') or None for all
+        
+    Returns:
+        List of CoinJoin transaction records
+    """
+    query = {"is_coinjoin": True}
+    if coinjoin_type:
+        query["coinjoin_type"] = coinjoin_type
+    
+    transactions = list(db.transactions.find(query)
+                       .sort("_id", -1)  # Most recent first
+                       .skip(offset)
+                       .limit(limit))
+    
+    return transactions
+
+def getCoinJoinStats():
+    """Get statistics about CoinJoin transactions with enhanced metrics"""
+    try:
+        collection = db.transactions
+        
+        # Enhanced aggregation pipeline for detailed statistics
+        pipeline = [
+            {"$match": {"is_coinjoin": True}},
+            {"$group": {
+                "_id": "$coinjoin_type",
+                "count": {"$sum": 1},
+                "avg_confidence": {"$avg": "$coinjoin_confidence"},
+                "avg_participants": {"$avg": "$coinjoin_participants"},
+                "total_participants": {"$sum": "$coinjoin_participants"},
+                "min_confidence": {"$min": "$coinjoin_confidence"},
+                "max_confidence": {"$max": "$coinjoin_confidence"},
+                "denominations": {"$addToSet": "$coinjoin_denomination"}
+            }},
+            {"$sort": {"count": -1}}
+        ]
+        
+        service_stats = list(collection.aggregate(pipeline))
+        
+        # Overall statistics
+        total_coinjoin = collection.count_documents({"is_coinjoin": True})
+        total_transactions = collection.count_documents({})
+        
+        # High confidence transactions (>= 80%)
+        high_confidence_count = collection.count_documents({
+            "is_coinjoin": True, 
+            "coinjoin_confidence": {"$gte": 0.8}
+        })
+        
+        return {
+            'total_coinjoin_transactions': total_coinjoin,
+            'total_transactions': total_transactions,
+            'coinjoin_percentage': (total_coinjoin / total_transactions * 100) if total_transactions > 0 else 0,
+            'high_confidence_count': high_confidence_count,
+            'high_confidence_percentage': (high_confidence_count / total_coinjoin * 100) if total_coinjoin > 0 else 0,
+            'services': {
+                stat['_id']: {
+                    'count': stat['count'],
+                    'percentage': (stat['count'] / total_coinjoin * 100) if total_coinjoin > 0 else 0,
+                    'avg_confidence': round(stat['avg_confidence'], 3),
+                    'avg_participants': round(stat['avg_participants'], 1) if stat['avg_participants'] else None,
+                    'total_participants': stat['total_participants'],
+                    'confidence_range': {
+                        'min': round(stat['min_confidence'], 3),
+                        'max': round(stat['max_confidence'], 3)
+                    },
+                    'unique_denominations': len([d for d in stat['denominations'] if d is not None])
+                } for stat in service_stats if stat['_id']
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting CoinJoin stats: {e}")
+        return {
+            'total_coinjoin_transactions': 0,
+            'total_transactions': 0,
+            'coinjoin_percentage': 0,
+            'high_confidence_count': 0,
+            'high_confidence_percentage': 0,
+            'services': {}
+        }

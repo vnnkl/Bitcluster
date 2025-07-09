@@ -5,6 +5,7 @@ from typing import Dict, List, Set, Optional, Tuple
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from blockstream.api_client import BlockstreamClient
+from heuristics.coinjoin_detection import CoinJoinDetectionHeuristic
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,9 @@ class DataProcessor:
         self.addresses_collection: Collection = db.bitcoin.addresses
         self.transactions_collection: Collection = db.bitcoin.transactions
         self.processing_collection: Collection = db.bitcoin.processing_status
+        
+        # Initialize heuristics
+        self.coinjoin_detector = CoinJoinDetectionHeuristic()
         
         # Create indexes for performance
         self._create_indexes()
@@ -34,6 +38,8 @@ class DataProcessor:
             self.transactions_collection.create_index("source_n_id")
             self.transactions_collection.create_index("destination_n_id")
             self.transactions_collection.create_index("data_source")
+            self.transactions_collection.create_index("is_coinjoin")
+            self.transactions_collection.create_index("coinjoin_type")
             
             logger.info("Database indexes created successfully")
         except Exception as e:
@@ -85,6 +91,9 @@ class DataProcessor:
         """
         transactions = []
         tx_id = tx_data["txid"]
+        
+        # Analyze transaction for CoinJoin patterns
+        coinjoin_analysis = self.coinjoin_detector.analyze_transaction(tx_data)
         
         # Get block info
         status = tx_data.get("status", {})
@@ -145,7 +154,14 @@ class DataProcessor:
                     "block_id": block_height,
                     "trx_date": tx_date,
                     "data_source": "blockstream",
-                    "processed_at": datetime.now()
+                    "processed_at": datetime.now(),
+                    # Enhanced CoinJoin analysis and storage
+                    "is_coinjoin": coinjoin_analysis['is_coinjoin'],
+                    "coinjoin_type": coinjoin_analysis['coinjoin_type'],
+                    "coinjoin_confidence": coinjoin_analysis['confidence'],
+                    "coinjoin_participants": coinjoin_analysis.get('coinjoin_participants'),
+                    "coinjoin_denomination": coinjoin_analysis.get('coinjoin_denomination'),
+                    "coinjoin_analysis": coinjoin_analysis['analysis']
                 }
                 
                 transactions.append(transaction_record)

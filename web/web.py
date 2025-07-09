@@ -1,6 +1,6 @@
 #from web import app
 from web.dao import getNodeFromAddress, getNodeInformation, getTransations, groupByAllDistribution, groupbyNode, \
-    groupbyAmount, groupbyDate
+    groupbyAmount, groupbyDate, getCoinJoinTransactions, getCoinJoinStats
 from flask import *
 import re
 import csv
@@ -109,6 +109,32 @@ def get_node_request(node_id):
     infos['transactions'] = {'in': trx_in, 'out':trx_out}
 
     return render_template('node_details.html',informations=infos, truncated=(truncated_trx_in or truncated_trx_out or truncated_by_node_in or truncated_by_node_out or truncated_by_amount_in or truncated_by_amount_out))
+
+@app.route('/coinjoin')
+def coinjoin_analysis():
+    """Display CoinJoin transaction analysis"""
+    # Get query parameters
+    coinjoin_type = request.args.get('type')  # Optional filter by type
+    page = int(request.args.get('page', 1))
+    per_page = 50
+    offset = (page - 1) * per_page
+    
+    # Get statistics
+    stats = getCoinJoinStats()
+    
+    # Get transactions
+    transactions = getCoinJoinTransactions(
+        limit=per_page, 
+        offset=offset, 
+        coinjoin_type=coinjoin_type
+    )
+    
+    return render_template('coinjoin_analysis.html', 
+                         stats=stats, 
+                         transactions=transactions,
+                         current_type=coinjoin_type,
+                         page=page,
+                         per_page=per_page)
 
 
 def trim_collection(collection, limit):
