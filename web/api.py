@@ -1,7 +1,7 @@
 from flask import Flask
 from flask import jsonify
 from web.dao import getNodeFromAddress, getNodeInformation, getTransations, groupByAllDistribution, groupbyNode, \
-    groupbyAmount, groupbyDate
+    groupbyAmount, groupbyDate, getAddresses, getAmountTotal, db
 
 	
 app = Flask(__name__)
@@ -13,26 +13,34 @@ def api_root():
 @app.route('/addresses')
 def getAddressesStatsRequest():
     collection = db.addresses
-    stats ={"count":collection.count()}
+    stats ={"count":collection.count_documents({})}
     return jsonify(stats)
 
 
 @app.route('/addresses/<address>')
 def getAddressInformationRequest(address):
-    node_id = db.addresses.find_one({"_id": address})['n_id']
+    addr_doc = db.addresses.find_one({"_id": address})
+    if addr_doc is None:
+        return jsonify({"error": "Address not found"}), 404
+    node_id = addr_doc['n_id']
     information = {"address": address, "node_information": getNodeInformation(node_id)}
     return jsonify(information)
 
 @app.route('/addresses/<address>/node_id')
 def getAddressNodeIdRequest(address):
-    return jsonify({"node_id": db.addresses.find_one({"_id": address})['n_id']})
+    addr_doc = db.addresses.find_one({"_id": address})
+    if addr_doc is None:
+        return jsonify({"error": "Address not found"}), 404
+    return jsonify({"node_id": addr_doc['n_id']})
 
 
 @app.route('/nodes')
 def getNodesStatsRequest():
     collection = db.addresses
     pipeline = [{"$group": {"_id": "$n_id"}}, {"$group": { "_id": 1, "count": { "$sum": 1 } }}]
-    stats ={"count":collection.aggregate(pipeline)}
+    result = list(collection.aggregate(pipeline))
+    count = result[0]['count'] if result else 0
+    stats = {"count": count}
     return jsonify(stats)
 
 @app.route('/nodes/<node_id>')
@@ -78,5 +86,5 @@ def getTransactionsReceivedByDateRequest(node_id, direction):
 
 @app.route('/nodes/<node_id>/transactions/<direction>/by_all_grouping')
 def getTransactionsReceivedAllDispositionRequest(node_id, direction):
-    return jsonify(groupByAllDistribution(getTransations(node_id,direction)))
+    return jsonify(groupByAllDistribution(getTransations(node_id,direction), direction))
 
